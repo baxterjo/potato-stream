@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.95"
+clap = { version = "4.5.26", features = ["derive"] }
 dittolive-ditto = { version = "4.9.2", features = ["experimental-bus"] }
 opencv = "0.93.6"
 tokio = { version = "1.43.0", features = ["full"] }

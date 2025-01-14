@@ -1,6 +1,8 @@
-use potato_stream::app::start_app;
+use clap::Parser;
+use potato_stream::{app::start_app, PotatoArgs};
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
-    start_app().await.unwrap();
+    let args = PotatoArgs::parse();
+    start_app(args).await.unwrap();
 }
