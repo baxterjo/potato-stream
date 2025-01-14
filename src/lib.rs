@@ -1,6 +1,7 @@
 pub mod app;
 pub mod capture;
 pub mod display;
+pub mod ditto;
 pub mod join_map;
 
 use clap::{Parser, Subcommand};

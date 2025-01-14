@@ -1,31 +1,50 @@
-use crate::{capture::start_capture, display::start_display};
+use crate::ditto::stream_server::start_stream_server;
+use crate::PotatoCommand;
+use crate::{capture::start_capture, display::start_display, PotatoArgs};
 
+use crate::join_map::JoinMap;
 use anyhow::Result;
+use dittolive_ditto::{AppId, Ditto};
 use opencv::prelude::*;
-use tokio::task::JoinError;
-use tracing::error;
+use tracing::{error, info};
 
-pub async fn start_app() -> Result<()> {
+pub async fn start_app(args: PotatoArgs) -> Result<()> {
     let _ = tracing_subscriber::fmt::try_init();
     let frame = Mat::default();
 
     let (frame_tx, frame_rx) = tokio::sync::watch::channel(frame);
-    let cap_handle = tokio::spawn(start_capture(30, frame_tx));
-    let display_handle = tokio::spawn(start_display(frame_rx));
+    let mut join_map = JoinMap::new();
 
-    tokio::select! {
-        res = cap_handle =>{
-            handle_join_result("capture_handle", res);
-        },
-        res = display_handle =>{
-            handle_join_result("display_handle", res);
+    let ditto = Ditto::new(AppId::generate());
+    match args.command {
+        PotatoCommand::Stream { loopback } => {
+            join_map.spawn("video_capture", start_capture(30, frame_tx));
+            if loopback {
+                join_map.spawn("video_display", start_display(frame_rx.clone()));
+            }
+            join_map.spawn("video_server", start_stream_server(ditto, frame_rx));
+        }
+        PotatoCommand::Watch => {
+
+            join_map.spawn("video_display", start_display(frame_rx));
         }
     }
 
-    Ok(())
-}
+    tokio::select! {
+        result_opt = join_map.join_next()=>{
+            let (name, result) = result_opt.expect("Empty join map was polled!");
+            error!(?result, name, "join handle returned unexpectedly");
+        }
+        _sig = tokio::signal::ctrl_c()=>{
+            info!("SIGINT received, exiting...")
+        }
+    }
 
-pub fn handle_join_result(handle_name: &str, res: Result<Result<(), anyhow::Error>, JoinError>) {
-    error!(?res, handle_name, "join handle returned unexpectedly");
-    res.unwrap().unwrap()
+    join_map.abort_all();
+
+    while let Some((name, result)) = join_map.join_next().await {
+        info!(?result, name, "join handle returned after abort");
+    }
+
+    Ok(())
 }
