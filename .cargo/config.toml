@@ -1,0 +1,9 @@
+rustflags = [
+    "--cfg",
+    "tokio_unstable",
+    "--cfg",
+    'ditto_external_experimental_bus="true"',
+]
+
+[target.aarch64-apple-darwin]
+rustflags = ["-L", "/usr/local/lib"]

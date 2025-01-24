@@ -3,7 +3,8 @@ use dittolive_ditto::{
     experimental::{bus::Reliability, peer_pubkey::PeerPubkey},
     Ditto,
 };
-use opencv::prelude::*;
+use opencv::imgcodecs::imdecode;
+use opencv::{imgcodecs::ImreadModes, prelude::*};
 use tokio::sync::{mpsc, watch};
 
 pub async fn start_stream_client(
@@ -11,16 +12,21 @@ pub async fn start_stream_client(
     peer: PeerPubkey,
     frame_tx: watch::Sender<Mat>,
 ) -> Result<()> {
-    let bus = ditto.bus().expect("The bus must have been enabled using `DittoBuilder::with_experimental_bus` to use this feature");
+    let bus = ditto.bus();
     let mut stream = bus
-        .connect(peer, "potato-stream")
+        .connect(peer, "potatostream")
         .reliability(Reliability::Unreliable)
         .on_receive_factory(mpsc::unbounded_channel)
         .finish_async()
         .await
         .expect("Unable to open stream client");
+    while let Some(inbound) = stream.recv().await {
+        let message = inbound.payload();
+        if let Ok(mat) = imdecode(&&message[..], ImreadModes::IMREAD_UNCHANGED as i32) {
+            frame_tx.send_replace(mat);
+        }
+    }
 
-    let message = stream.recv().await;
     Ok(())
 }
 

@@ -8,12 +8,12 @@ use tokio::sync::{mpsc, watch};
 use tokio::task::JoinSet;
 
 pub async fn start_stream_server(ditto: Ditto, frame_rx: watch::Receiver<Mat>) -> Result<()> {
-    let bus = ditto.bus().expect("The bus must have been enabled using `DittoBuilder::with_experimental_bus` to use this feature");
+    let bus = ditto.bus();
     let mut acceptor = bus
-        .bind_topic("potato-stream")
+        .bind_topic("potatostream")
         .reliability(Reliability::Unreliable)
         .finish(mpsc::unbounded_channel())
-        .expect("Unable to bind topic.");
+        .expect("Unable to bind topic");
     let mut join_set = JoinSet::new();
 
     loop {

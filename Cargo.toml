@@ -6,8 +6,11 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.95"
 clap = { version = "4.5.26", features = ["derive"] }
-dittolive-ditto = { version = "4.9.2", features = ["experimental-bus"] }
-opencv = "0.93.6"
+dittolive-ditto = { path = "../../commercial/ditto/rust/dittolive-ditto", features = [
+    "experimental-bus",
+] }
+opencv = { version = "0.94.1", features = ["clang-runtime"] }
+serde_json = "1.0.135"
 tokio = { version = "1.43.0", features = ["full"] }
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
