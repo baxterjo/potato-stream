@@ -16,6 +16,14 @@ pub struct PotatoArgs {
     /// What is the name of the stream?
     #[arg(short, long)]
     name: String,
+
+    /// If you want to shape the mesh, add a list of connection addresses here.
+    #[arg(short, long)]
+    connect: Vec<String>,
+
+    /// If you want to shape the mesh, add a listen address here.
+    #[arg(short, long)]
+    listen: Option<String>,
 }
 
 #[derive(Debug, Subcommand, Clone)]

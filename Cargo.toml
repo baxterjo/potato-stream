@@ -9,8 +9,14 @@ clap = { version = "4.5.26", features = ["derive"] }
 dittolive-ditto = { path = "../../commercial/ditto/rust/dittolive-ditto", features = [
     "experimental-bus",
 ] }
-opencv = { version = "0.94.1", features = ["clang-runtime"] }
+opencv = { version = "0.94.1", features = ["clang-runtime"], optional = true }
+pretty_assertions = "1.4.1"
 serde_json = "1.0.135"
 tokio = { version = "1.43.0", features = ["full"] }
 tracing = "0.1.41"
 tracing-subscriber = "0.3.19"
+
+[features]
+default = ["media"]
+# Deactivate if you only want to use app as repeater.
+media = ["dep:opencv"]

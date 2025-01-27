@@ -6,5 +6,8 @@ stream:
 watch:
     RUST_LOG=debug cargo run -- --name test_stream watch
 
+repeat:
+    RUST_LOG=debug cargo run --no-default-features -- --name test_stream watch
+
 test:
     RUST_LOG=debug cargo test

@@ -1,6 +1,9 @@
+use std::ops::Not;
+
 use crate::capture::start_capture;
 use crate::display::start_display;
 use crate::ditto::find_stream::find_stream;
+use crate::ditto::shape_mesh;
 use crate::ditto::stream_client::start_stream_client;
 use crate::ditto::stream_server::start_stream_server;
 use crate::ditto::{advertise_stream::advertise_stream, init_ditto};
@@ -20,6 +23,12 @@ pub async fn start_app(args: PotatoArgs) -> Result<()> {
     let mut join_map = JoinMap::new();
 
     let ditto = init_ditto().expect("Failed to init ditto");
+
+    if args.connect.is_empty().not() || args.listen.is_some() {
+        shape_mesh(&ditto, args.connect, args.listen)?;
+    }
+
+    #[cfg(feature = "media")]
     match args.command {
         PotatoCommand::Stream { loopback } => {
             advertise_stream(&ditto, args.name.clone()).expect("Failed to advertise stream.");
@@ -38,6 +47,9 @@ pub async fn start_app(args: PotatoArgs) -> Result<()> {
             );
         }
     }
+
+    #[cfg(not(feature = "media"))]
+    join_map.spawn("the_neverending_stoorrrrryyyyyyy", future::pending());
 
     tokio::select! {
         result_opt = join_map.join_next()=>{
