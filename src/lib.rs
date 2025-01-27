@@ -1,8 +1,9 @@
 pub mod app;
-pub mod capture;
-pub mod display;
 pub mod ditto;
 pub mod join_map;
+
+#[cfg(feature = "media")]
+pub mod media;
 
 use clap::{Parser, Subcommand};
 

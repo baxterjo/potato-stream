@@ -1,4 +1,3 @@
-set dotenv-load
 
 stream:
     RUST_LOG=debug cargo run -- --name test_stream stream --loopback

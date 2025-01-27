@@ -1,6 +1,9 @@
 pub mod advertise_stream;
 pub mod find_stream;
+
+#[cfg(feature = "media")]
 pub mod stream_client;
+#[cfg(feature = "media")]
 pub mod stream_server;
 
 use anyhow::Result;
@@ -28,8 +31,8 @@ pub fn init_ditto() -> Result<Ditto> {
 
 pub fn shape_mesh(
     ditto: &Ditto,
-    connect: Vec<String>,
-    listen: Option<String>,
+    connect: &Vec<String>,
+    listen: &Option<String>,
 ) -> anyhow::Result<()> {
     let old_transport = ditto.transport_config();
     let mut new_transport = TransportConfig::new();
@@ -37,7 +40,10 @@ pub fn shape_mesh(
     for connect_addr in connect {
         // Check if the provided string can be parsed as a TCP IP.
         let _: SocketAddr = connect_addr.parse()?;
-        new_transport.connect.tcp_servers.insert(connect_addr);
+        new_transport
+            .connect
+            .tcp_servers
+            .insert(connect_addr.clone());
     }
     if let Some(listen_addr) = listen {
         let parsed_addr: SocketAddr = listen_addr.parse()?;

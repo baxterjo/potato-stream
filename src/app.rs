@@ -1,34 +1,76 @@
 use std::ops::Not;
 
-use crate::capture::start_capture;
-use crate::display::start_display;
-use crate::ditto::find_stream::find_stream;
 use crate::ditto::shape_mesh;
-use crate::ditto::stream_client::start_stream_client;
-use crate::ditto::stream_server::start_stream_server;
-use crate::ditto::{advertise_stream::advertise_stream, init_ditto};
+
+use crate::ditto::init_ditto;
 use crate::PotatoArgs;
-use crate::PotatoCommand;
 
 use crate::join_map::JoinMap;
 use anyhow::Result;
-use opencv::prelude::*;
+use dittolive_ditto::Ditto;
 use tracing::{error, info};
+
+#[cfg(not(feature = "media"))]
+use std::future;
 
 pub async fn start_app(args: PotatoArgs) -> Result<()> {
     let _ = tracing_subscriber::fmt::try_init();
-    let frame = Mat::default();
 
-    let (frame_tx, frame_rx) = tokio::sync::watch::channel(frame);
     let mut join_map = JoinMap::new();
 
     let ditto = init_ditto().expect("Failed to init ditto");
 
     if args.connect.is_empty().not() || args.listen.is_some() {
-        shape_mesh(&ditto, args.connect, args.listen)?;
+        shape_mesh(&ditto, &args.connect, &args.listen)?;
     }
 
     #[cfg(feature = "media")]
+    start_media(&mut join_map, ditto, &args)?;
+
+    #[cfg(not(feature = "media"))]
+    join_map.spawn(
+        "the_neverending_stoorrrrryyyyyyy",
+        future::pending::<Result<()>>(),
+    );
+
+    tokio::select! {
+        result_opt = join_map.join_next()=>{
+            let (name, result) = result_opt.expect("Empty join map was polled!");
+            error!(?result, name, "join handle returned unexpectedly");
+        }
+        _sig = tokio::signal::ctrl_c()=>{
+            info!("SIGINT received, exiting...")
+        }
+    }
+
+    join_map.abort_all();
+
+    while let Some((name, result)) = join_map.join_next().await {
+        info!(?result, name, "join handle returned after abort");
+    }
+
+    Ok(())
+}
+
+#[cfg(feature = "media")]
+fn start_media(
+    join_map: &mut JoinMap<anyhow::Result<()>>,
+    ditto: Ditto,
+    args: &PotatoArgs,
+) -> Result<()> {
+    use crate::ditto::advertise_stream::advertise_stream;
+    use crate::ditto::find_stream::find_stream;
+    use crate::ditto::stream_client::start_stream_client;
+    use crate::ditto::stream_server::start_stream_server;
+    use crate::media::capture::start_capture;
+    use crate::media::display::start_display;
+    use crate::PotatoCommand;
+    use opencv::prelude::*;
+
+    let frame = Mat::default();
+
+    let (frame_tx, frame_rx) = tokio::sync::watch::channel(frame);
+
     match args.command {
         PotatoCommand::Stream { loopback } => {
             advertise_stream(&ditto, args.name.clone()).expect("Failed to advertise stream.");
@@ -46,25 +88,6 @@ pub async fn start_app(args: PotatoArgs) -> Result<()> {
                 start_stream_client(ditto, pub_key, frame_tx),
             );
         }
-    }
-
-    #[cfg(not(feature = "media"))]
-    join_map.spawn("the_neverending_stoorrrrryyyyyyy", future::pending());
-
-    tokio::select! {
-        result_opt = join_map.join_next()=>{
-            let (name, result) = result_opt.expect("Empty join map was polled!");
-            error!(?result, name, "join handle returned unexpectedly");
-        }
-        _sig = tokio::signal::ctrl_c()=>{
-            info!("SIGINT received, exiting...")
-        }
-    }
-
-    join_map.abort_all();
-
-    while let Some((name, result)) = join_map.join_next().await {
-        info!(?result, name, "join handle returned after abort");
     }
 
     Ok(())
