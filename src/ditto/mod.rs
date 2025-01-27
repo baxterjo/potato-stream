@@ -37,6 +37,8 @@ pub fn shape_mesh(
     let old_transport = ditto.transport_config();
     let mut new_transport = TransportConfig::new();
     new_transport.peer_to_peer.lan.enabled = true;
+    new_transport.peer_to_peer.lan.mdns_enabled = false;
+    new_transport.peer_to_peer.lan.multicast_enabled = false;
     for connect_addr in connect {
         // Check if the provided string can be parsed as a TCP IP.
         let _: SocketAddr = connect_addr.parse()?;

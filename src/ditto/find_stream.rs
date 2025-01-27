@@ -28,7 +28,7 @@ pub fn find_stream(ditto: &Ditto, stream_name: &str) -> PeerPubkey {
                 .as_str()
             {
                 if name == stream_name {
-                    debug!(?peer, "Found peer candidate for stream.");
+                    debug!("Found peer candidate for stream:\n{peer:#?}");
                     out_opt = PeerPubkey::from_str(&peer.peer_key_string).ok();
                 }
             }

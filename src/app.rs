@@ -14,7 +14,16 @@ use tracing::{error, info};
 use std::future;
 
 pub async fn start_app(args: PotatoArgs) -> Result<()> {
-    let _ = tracing_subscriber::fmt::try_init();
+    let builder = tracing_subscriber::fmt()
+        .pretty()
+        .with_line_number(false)
+        .with_file(false)
+        .with_thread_ids(false)
+        .with_thread_names(false)
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env());
+    builder
+        .try_init()
+        .expect("Failed to initialize tracing subscriber.");
 
     let mut join_map = JoinMap::new();
 
