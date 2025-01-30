@@ -6,8 +6,10 @@ use dittolive_ditto::{
 use opencv::{core::Vector, imgcodecs, prelude::*};
 use tokio::sync::{mpsc, watch};
 use tokio::task::JoinSet;
+use tracing::info;
 
 pub async fn start_stream_server(ditto: Ditto, frame_rx: watch::Receiver<Mat>) -> Result<()> {
+    info!("Starting stream server");
     let bus = ditto.bus();
     let mut acceptor = bus
         .bind_topic("potatostream")
@@ -43,24 +45,25 @@ pub async fn handle_connection(
     stream_candidate: StreamCandidate,
     mut frame_rx: watch::Receiver<Mat>,
 ) {
+    info!(?stream_candidate, "New stream candidate.");
     let stream = stream_candidate.open_write_only();
     let mut closed = stream.closed();
     let mut buf: Vector<u8> = Vector::new();
 
     loop {
         tokio::select! {
-            _ = &mut closed =>{
-                break;
-            }
-            _ = frame_rx.changed() =>{
-                let frame = frame_rx.borrow_and_update();
-                buf.clear();
-                imgcodecs::imencode(".jpg", &*frame, &mut buf, &Vector::new())
-                    .expect("Failed to encode image");
-                {
-                    stream.message(buf.clone().to_vec()).send();
-                };
-            }
+             _ = &mut closed =>{
+                 break;
+             }
+             _ = frame_rx.changed() =>{
+                 let frame = frame_rx.borrow_and_update();
+                 buf.clear();
+                 imgcodecs::imencode(".jpg", &*frame, &mut buf, &Vector::new())
+                     .expect("Failed to encode image");
+                 {
+                     stream.message(buf.clone().to_vec()).send();
+                 };
+             }
         }
     }
 }

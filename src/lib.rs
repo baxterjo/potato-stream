@@ -34,6 +34,9 @@ pub enum PotatoCommand {
         /// Do you want to display the recorded video on the streaming device?
         #[arg(short, long)]
         loopback: bool,
+        /// Frame rate to capture the stream
+        #[arg(short, long)]
+        framerate: u64,
     },
     /// Watch a streamed video
     Watch,

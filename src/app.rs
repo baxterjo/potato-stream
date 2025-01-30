@@ -81,9 +81,12 @@ fn start_media(
     let (frame_tx, frame_rx) = tokio::sync::watch::channel(frame);
 
     match args.command {
-        PotatoCommand::Stream { loopback } => {
+        PotatoCommand::Stream {
+            loopback,
+            framerate,
+        } => {
             advertise_stream(&ditto, args.name.clone()).expect("Failed to advertise stream.");
-            join_map.spawn("video_capture", start_capture(30, frame_tx));
+            join_map.spawn("video_capture", start_capture(framerate, frame_tx));
             if loopback {
                 join_map.spawn("video_display", start_display(true, frame_rx.clone()));
             }
