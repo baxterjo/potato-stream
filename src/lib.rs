@@ -36,7 +36,7 @@ pub enum PotatoCommand {
         loopback: bool,
         /// Frame rate to capture the stream
         #[arg(short, long)]
-        framerate: u64,
+        framerate: f32,
     },
     /// Watch a streamed video
     Watch,
