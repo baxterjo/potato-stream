@@ -21,7 +21,7 @@ pub async fn start_stream_client(
     let bus = ditto.bus();
     let mut stream = bus
         .connect(peer, "potatostream")
-        .reliability(Reliability::Unreliable)
+        .reliability(Reliability::Reliable)
         .on_receive_factory(mpsc::unbounded_channel)
         .finish_async()
         .await
