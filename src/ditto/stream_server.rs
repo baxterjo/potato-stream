@@ -75,7 +75,7 @@ pub async fn handle_connection(
                      .expect("Failed to encode image");
                  {
                     bytes_accum += buf.len();
-                    stream.message(buf.clone().to_vec()).send();
+                    let _ = stream.message(buf.clone().to_vec()).send();
                  };
              }
         }
