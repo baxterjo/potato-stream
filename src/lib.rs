@@ -1,6 +1,6 @@
 pub mod app;
-pub mod ditto;
 pub mod join_map;
+pub mod stream;
 
 #[cfg(feature = "media")]
 pub mod media;

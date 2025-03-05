@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use dittolive_ditto::experimental::bus::{Reliability, SendStatus};
-use potato_stream::ditto::init_ditto;
+use potato_stream::stream::init_ditto;
 #[tokio::test]
 pub async fn test_acceptor_doc_example_works_as_written() {
     use tokio::sync::mpsc::unbounded_channel as channel; // (`std::sync::mpsc::channel` would also work)

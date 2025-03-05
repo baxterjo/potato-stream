@@ -1,8 +1,8 @@
 use std::ops::Not;
 
-use crate::ditto::shape_mesh;
+use crate::stream::shape_mesh;
 
-use crate::ditto::init_ditto;
+use crate::stream::init_ditto;
 use crate::PotatoArgs;
 
 use crate::join_map::JoinMap;
@@ -67,12 +67,12 @@ fn start_media(
     ditto: Ditto,
     args: &PotatoArgs,
 ) -> Result<()> {
-    use crate::ditto::advertise_stream::advertise_stream;
-    use crate::ditto::find_stream::find_stream;
-    use crate::ditto::stream_client::start_stream_client;
-    use crate::ditto::stream_server::start_stream_server;
     use crate::media::capture::start_capture;
     use crate::media::display::start_display;
+    use crate::stream::advertise_stream::advertise_stream;
+    use crate::stream::find_stream::find_stream;
+    use crate::stream::stream_client::start_stream_client;
+    use crate::stream::stream_server::start_stream_server;
     use crate::PotatoCommand;
     use opencv::prelude::*;
 
