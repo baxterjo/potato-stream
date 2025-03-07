@@ -1,8 +1,8 @@
 use std::ops::Not;
 
-use crate::stream::shape_mesh;
+use crate::utils::shape_mesh;
 
-use crate::stream::init_ditto;
+use crate::utils::init_ditto;
 use crate::PotatoArgs;
 
 use crate::join_map::JoinMap;
@@ -67,18 +67,20 @@ fn start_media(
     ditto: Ditto,
     args: &PotatoArgs,
 ) -> Result<()> {
+    use std::time::Instant;
+
     use crate::media::capture::start_capture;
     use crate::media::display::start_display;
     use crate::stream::advertise_stream::advertise_stream;
     use crate::stream::find_stream::find_stream;
     use crate::stream::stream_client::start_stream_client;
-    use crate::stream::stream_server::start_stream_server;
+    use crate::stream::stream_server::Server;
     use crate::PotatoCommand;
     use opencv::prelude::*;
 
     let frame = Mat::default();
 
-    let (frame_tx, frame_rx) = tokio::sync::watch::channel(frame);
+    let (frame_tx, frame_rx) = tokio::sync::watch::channel((frame, Instant::now()));
 
     match args.command {
         PotatoCommand::Stream {
@@ -90,7 +92,8 @@ fn start_media(
             if loopback {
                 join_map.spawn("video_display", start_display(true, frame_rx.clone()));
             }
-            join_map.spawn("video_server", start_stream_server(ditto, frame_rx));
+            let server = Server::new(&ditto, &args.name, frame_rx)?;
+            join_map.spawn("video_server", server.run());
         }
         PotatoCommand::Watch => {
             let pub_key = find_stream(&ditto, &args.name);

@@ -6,56 +6,82 @@ pub mod stream_client;
 #[cfg(feature = "media")]
 pub mod stream_server;
 
-use anyhow::Result;
-use dittolive_ditto::prelude::*;
-use pretty_assertions::Comparison;
-use std::{net::SocketAddr, str::FromStr};
-use tracing::debug;
+use dittolive_ditto::experimental::peer_pubkey::PeerPubkey;
+use serde::{Deserialize, Serialize};
+use std::net::{Ipv6Addr, SocketAddr, SocketAddrV6};
+use std::time::Duration;
+use str0m::{
+    change::{SdpAnswer, SdpOffer},
+    channel::ChannelData,
+    media::MediaData,
+};
+use thiserror::Error;
+use tracing::{debug, instrument};
 
-const APP_ID: &str = "316d9de7-20e8-4035-8d55-90e702ba7291";
-const OFFLINE_TEST_TOKEN: &str = "o2d1c2VyX2lkdTEwNjY2MzIwMDM3NDExNDA1MDEyN2ZleHBpcnl4GDIwMjUtMDItMTRUMDc6NTk6NTkuOTk5WmlzaWduYXR1cmV4WE81VVpVMDBDZFlMUlVwT3k4WThQWm9tTHdnYmU2Ujd1c1kxTUd3NkhHc0Z2Wmx3RGJsWXg4eDhmL2dLVWZRZm1nMWxLOEZTZ1ZVYkJLM09qUGo2SFFRPT0=";
+const IPV6_HEADER: u128 = 0xd1770 << u128::BITS - 20;
 
-pub fn init_ditto() -> Result<Ditto> {
-    let app_id = AppId::from_str(APP_ID)?;
-    let ditto = Ditto::builder()
-        .with_temp_dir()
-        .with_minimum_log_level(LogLevel::Warning)
-        .with_identity(move |ditto_root| OfflinePlayground::new(ditto_root, app_id))?
-        .build()?;
-    ditto.set_offline_only_license_token(OFFLINE_TEST_TOKEN)?;
-    ditto.disable_sync_with_v3()?;
-
-    ditto.start_sync()?;
-    Ok(ditto)
+#[derive(Debug, Serialize, Deserialize)]
+pub enum WebRtcUserApi {
+    SdpOffer(SdpOffer),
+    SdpAnswer(SdpAnswer),
+    RtcData(Vec<u8>),
 }
 
-pub fn shape_mesh(
-    ditto: &Ditto,
-    connect: &Vec<String>,
-    listen: &Option<String>,
-) -> anyhow::Result<()> {
-    let old_transport = ditto.transport_config();
-    let mut new_transport = TransportConfig::new();
-    new_transport.peer_to_peer.lan.enabled = true;
-    new_transport.peer_to_peer.lan.mdns_enabled = false;
-    new_transport.peer_to_peer.lan.multicast_enabled = false;
-    for connect_addr in connect {
-        // Check if the provided string can be parsed as a TCP IP.
-        let _: SocketAddr = connect_addr.parse()?;
-        new_transport
-            .connect
-            .tcp_servers
-            .insert(connect_addr.clone());
-    }
-    if let Some(listen_addr) = listen {
-        let parsed_addr: SocketAddr = listen_addr.parse()?;
-        new_transport.listen.tcp.enabled = true;
-        new_transport.listen.tcp.interface_ip = parsed_addr.ip().to_string();
-        new_transport.listen.tcp.port = parsed_addr.port();
-    }
-    let diff = Comparison::new(&old_transport, &new_transport);
-    debug!(%diff, "Setting custom tracing config");
-    ditto.set_transport_config(new_transport);
+#[derive(Debug, PartialEq)]
+pub enum WebRtcEvent {
+    Continue(Duration),
+    Media(MediaData),
+    Channel(ChannelData),
+    Disconnected,
+}
 
-    Ok(())
+#[derive(Error, Debug, PartialEq)]
+pub enum StreamError {
+    #[error("Ditto data stream closed unexpectedly")]
+    DittoStreamClosed,
+    #[error("Failed to fetch payload params for video.")]
+    PayloadParams,
+    #[error("WebRTC instance disconnected unexpectedly")]
+    WebRtcDisconnect,
+}
+
+/// Grab a socket address from a peer key.
+/// This address is not intended to be used with a normal UDP or TCP socket,
+/// it is only meant to be used in the WebRTC state machine.
+#[instrument]
+pub fn socket_from_peer_key(value: PeerPubkey) -> SocketAddr {
+    // Grab the last 80 bits
+    let last_chunk = &value[value.len() - 10..];
+    let mut bits: u128 = IPV6_HEADER;
+    for (i, val) in last_chunk.iter().enumerate() {
+        let shift = 72 - (i * 8);
+        bits |= (*val as u128) << shift;
+    }
+    let ipv6_addr = Ipv6Addr::from_bits(bits);
+    let sock = SocketAddr::V6(SocketAddrV6::new(ipv6_addr, 0xd177, 0, 0));
+    debug!(ipv6_sock = %sock);
+    sock
+}
+
+#[cfg(test)]
+mod test {
+    use crate::utils::init_ditto;
+    use std::{net::IpAddr, str::FromStr};
+
+    use super::*;
+    #[test]
+    fn socket_from_peer_key_works() {
+        let _ = tracing_subscriber::fmt::try_init();
+        let ditto = init_ditto().expect("Failed to init ditto");
+        let pp_key =
+            PeerPubkey::from_str(&ditto.presence().graph().local_peer.peer_key_string).unwrap();
+        let socket_addr = socket_from_peer_key(pp_key.clone());
+        if let IpAddr::V6(address) = socket_addr.ip() {
+            let address_octets = address.octets();
+            assert_eq!(address_octets[..3], [0xd1, 0x77, 0x00]);
+            assert_eq!(&address_octets[6..], &pp_key[pp_key.len() - 10..]);
+        } else {
+            panic!("Ipv4 not supported")
+        }
+    }
 }

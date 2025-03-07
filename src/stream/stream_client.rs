@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use dittolive_ditto::{
@@ -16,7 +16,7 @@ use tracing::{debug, error};
 pub async fn start_stream_client(
     ditto: Ditto,
     peer: PeerPubkey,
-    frame_tx: watch::Sender<Mat>,
+    frame_tx: watch::Sender<(Mat, Instant)>,
 ) -> Result<()> {
     let bus = ditto.bus();
     let mut stream = bus
@@ -29,6 +29,8 @@ pub async fn start_stream_client(
     let mut interval = time::interval(Duration::from_secs(5));
     let mut bytes_sum: usize = 0;
 
+    let start = Instant::now();
+
     loop {
         tokio::select! {
             inbound_opt = stream.recv()=>{
@@ -36,7 +38,7 @@ pub async fn start_stream_client(
                     let message = inbound.payload();
                     bytes_sum += message.len();
                     match imdecode(&&message[..], ImreadModes::IMREAD_UNCHANGED as i32) {
-                        Ok(mat)=>{ frame_tx.send_replace(mat); },
+                        Ok(mat)=>{ frame_tx.send_replace((mat, start)); },
                         Err(err)=> { error!(%err, "Error decoding frame"); },
                     }
                 } else {
