@@ -20,7 +20,7 @@ use tracing::{debug, instrument};
 
 const IPV6_HEADER: u128 = 0xd1770 << u128::BITS - 20;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
 pub enum WebRtcUserApi {
     SdpOffer(SdpOffer),
     SdpAnswer(SdpAnswer),
@@ -43,13 +43,15 @@ pub enum StreamError {
     PayloadParams,
     #[error("WebRTC instance disconnected unexpectedly")]
     WebRtcDisconnect,
+    #[error("Received unexpected WebRtcUserApi message: {0:?}")]
+    ApiOutOfSequence(WebRtcUserApi),
 }
 
 /// Grab a socket address from a peer key.
 /// This address is not intended to be used with a normal UDP or TCP socket,
 /// it is only meant to be used in the WebRTC state machine.
 #[instrument]
-pub fn socket_from_peer_key(value: PeerPubkey) -> SocketAddr {
+pub fn socket_from_peer_key(value: &PeerPubkey) -> SocketAddr {
     // Grab the last 80 bits
     let last_chunk = &value[value.len() - 10..];
     let mut bits: u128 = IPV6_HEADER;
@@ -75,7 +77,7 @@ mod test {
         let ditto = init_ditto().expect("Failed to init ditto");
         let pp_key =
             PeerPubkey::from_str(&ditto.presence().graph().local_peer.peer_key_string).unwrap();
-        let socket_addr = socket_from_peer_key(pp_key.clone());
+        let socket_addr = socket_from_peer_key(&pp_key);
         if let IpAddr::V6(address) = socket_addr.ip() {
             let address_octets = address.octets();
             assert_eq!(address_octets[..3], [0xd1, 0x77, 0x00]);

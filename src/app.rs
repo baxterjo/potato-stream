@@ -34,7 +34,7 @@ pub async fn start_app(args: PotatoArgs) -> Result<()> {
     }
 
     #[cfg(feature = "media")]
-    start_media(&mut join_map, ditto, &args)?;
+    start_media(&mut join_map, ditto, &args).await?;
 
     #[cfg(not(feature = "media"))]
     join_map.spawn(
@@ -62,7 +62,7 @@ pub async fn start_app(args: PotatoArgs) -> Result<()> {
 }
 
 #[cfg(feature = "media")]
-fn start_media(
+async fn start_media(
     join_map: &mut JoinMap<anyhow::Result<()>>,
     ditto: Ditto,
     args: &PotatoArgs,
@@ -73,7 +73,7 @@ fn start_media(
     use crate::media::display::start_display;
     use crate::stream::advertise_stream::advertise_stream;
     use crate::stream::find_stream::find_stream;
-    use crate::stream::stream_client::start_stream_client;
+    use crate::stream::stream_client::StreamClient;
     use crate::stream::stream_server::Server;
     use crate::PotatoCommand;
     use opencv::prelude::*;
@@ -98,10 +98,8 @@ fn start_media(
         PotatoCommand::Watch => {
             let pub_key = find_stream(&ditto, &args.name);
             join_map.spawn("video_display", start_display(false, frame_rx));
-            join_map.spawn(
-                "video_client",
-                start_stream_client(ditto, pub_key, frame_tx),
-            );
+            let client = StreamClient::new(&ditto, pub_key, &args.name, frame_tx).await?;
+            join_map.spawn("video_client", client.run());
         }
     }
 

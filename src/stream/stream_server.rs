@@ -7,7 +7,7 @@ use std::{
 use anyhow::Result;
 use dittolive_ditto::{
     experimental::{
-        bus::{Acceptor, Inbound, Reliability, SendStatus, Stream, StreamCandidate},
+        bus::{Acceptor, Inbound, Reliability, SendStatus, Stream},
         peer_pubkey::PeerPubkey,
     },
     Ditto,
@@ -19,7 +19,10 @@ use str0m::{
     net::{Protocol, Receive},
     Candidate, Event, IceConnectionState, Input, Output, Rtc,
 };
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{
+    mpsc::{self, unbounded_channel},
+    watch,
+};
 use tokio::{
     sync::mpsc::{error::TryRecvError, UnboundedReceiver},
     task::JoinSet,
@@ -31,8 +34,7 @@ use super::{socket_from_peer_key, StreamError, WebRtcEvent, WebRtcUserApi};
 
 struct ClientHandler {
     rtc: Rtc,
-    ditto_stream: Stream<()>,
-    stream_incoming: mpsc::UnboundedReceiver<Inbound>,
+    ditto_stream: Stream<UnboundedReceiver<Inbound>>,
     local_addr: SocketAddr,
     remote_addr: SocketAddr,
     video_mid: Mid,
@@ -41,14 +43,12 @@ struct ClientHandler {
 
 impl ClientHandler {
     async fn new(
-        candidate: StreamCandidate,
+        mut stream: Stream<UnboundedReceiver<Inbound>>,
         local_addr: SocketAddr,
         video: watch::Receiver<(Mat, Instant)>,
         stream_name: String,
     ) -> Result<Self> {
-        let (incoming_tx, mut incoming) = mpsc::unbounded_channel();
-        let remote_addr = socket_from_peer_key(candidate.peer_pubkey());
-        let stream = candidate.open(incoming_tx);
+        let remote_addr = socket_from_peer_key(&stream.peer_pubkey());
 
         // Set up RTC instance with initial offering.
         let mut rtc = Rtc::new();
@@ -80,7 +80,7 @@ impl ClientHandler {
 
         assert_eq!(status, SendStatus::Sent, "Sdp offer failed to send.");
 
-        let message = incoming.recv().await.expect("SDP answer message");
+        let message = stream.recv().await.expect("SDP answer message");
         if let WebRtcUserApi::SdpAnswer(answer) =
             serde_cbor::from_slice::<WebRtcUserApi>(&message.payload())?
         {
@@ -92,7 +92,6 @@ impl ClientHandler {
         Ok(Self {
             rtc,
             ditto_stream: stream,
-            stream_incoming: incoming,
             local_addr,
             remote_addr,
             video_mid,
@@ -125,7 +124,7 @@ impl ClientHandler {
                     self.rtc.handle_input(Input::Timeout(Instant::now()))?;
                     continue;
                 }
-                incoming_opt = self.stream_incoming.recv() =>{
+                incoming_opt = self.ditto_stream.recv() =>{
                     let input = self.handle_input_opt(incoming_opt, &mut input_buf)?;
                     self.rtc.handle_input(input)?;
                     continue;
@@ -272,7 +271,7 @@ impl ClientHandler {
 pub struct Server {
     stream_name: String,
     ditto_ip: SocketAddr,
-    acceptor: Acceptor<UnboundedReceiver<StreamCandidate>>,
+    acceptor: Acceptor<UnboundedReceiver<Stream<UnboundedReceiver<Inbound>>>>,
     video: watch::Receiver<(Mat, Instant)>,
     clients: JoinSet<Result<()>>,
 }
@@ -289,6 +288,7 @@ impl Server {
         let bus = ditto.bus();
         let acceptor = bus
             .bind_topic(stream_name)
+            .on_receive_factory(unbounded_channel)
             .reliability(Reliability::Unreliable)
             .finish(mpsc::unbounded_channel())?;
         Ok(Self {
@@ -296,7 +296,7 @@ impl Server {
             acceptor,
             video,
             clients: JoinSet::new(),
-            ditto_ip: socket_from_peer_key(pp_key),
+            ditto_ip: socket_from_peer_key(&pp_key),
         })
     }
 
@@ -313,9 +313,9 @@ impl Server {
         }
         loop {
             match self.acceptor.try_recv() {
-                Ok(candidate) => {
+                Ok(stream) => {
                     let client = ClientHandler::new(
-                        candidate,
+                        stream,
                         self.ditto_ip.clone(),
                         self.video.clone(),
                         self.stream_name.clone(),
