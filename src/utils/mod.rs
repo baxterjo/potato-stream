@@ -10,7 +10,7 @@ pub fn init_ditto() -> Result<Ditto> {
     let app_id = AppId::from_str(APP_ID)?;
     let ditto = Ditto::builder()
         .with_temp_dir()
-        .with_minimum_log_level(LogLevel::Warning)
+        .with_minimum_log_level(LogLevel::Debug)
         .with_identity(move |ditto_root| OfflinePlayground::new(ditto_root, app_id))?
         .build()?;
     ditto.set_offline_only_license_token(OFFLINE_TEST_TOKEN)?;
