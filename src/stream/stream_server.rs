@@ -23,11 +23,7 @@ use tokio::sync::{
     mpsc::{self, unbounded_channel},
     watch,
 };
-use tokio::{
-    sync::mpsc::{error::TryRecvError, UnboundedReceiver},
-    task::JoinSet,
-    time::timeout,
-};
+use tokio::{sync::mpsc::UnboundedReceiver, task::JoinSet, time::timeout};
 use tracing::{debug, error, instrument, trace, warn};
 
 use super::{socket_from_peer_key, StreamError, WebRtcEvent, WebRtcUserApi};
@@ -301,37 +297,58 @@ impl Server {
     }
 
     pub async fn run(mut self) -> Result<()> {
-        while let Some(result) = self.clients.try_join_next() {
-            match result {
-                Ok(Ok(())) => {}
-                Ok(Err(err)) => error!(%err, "Client errored"),
-                Err(err) if err.is_panic() => {
-                    error!(%err, "Client panicked");
-                }
-                Err(_err) => {}
-            }
-        }
         loop {
-            match self.acceptor.try_recv() {
-                Ok(stream) => {
-                    let client = ClientHandler::new(
-                        stream,
-                        self.ditto_ip.clone(),
-                        self.video.clone(),
-                        self.stream_name.clone(),
-                    )
-                    .await?;
-                    self.clients.spawn(client.run());
-                }
-                Err(TryRecvError::Empty) => {
-                    break;
-                }
-                Err(err) => {
-                    return Err(err)?;
+            // If clients is empty, wait for new client.
+            while self.clients.is_empty() {
+                match self.acceptor.recv().await {
+                    Some(stream) => {
+                        let client = ClientHandler::new(
+                            stream,
+                            self.ditto_ip.clone(),
+                            self.video.clone(),
+                            self.stream_name.clone(),
+                        )
+                        .await?;
+                        self.clients.spawn(client.run());
+                    }
+                    None => {
+                        return Err(StreamError::DittoStreamClosed)?;
+                    }
                 }
             }
-        }
 
-        Ok(())
+            // If clients is not empty clean old clients and wait for new clients
+            tokio::select! {
+                result = self.clients.join_next()=>{
+                    match result {
+                        Some(Ok(Ok(()))) => {},
+                        Some(Ok(Err(err))) => error!(%err, "Client errored"),
+                        Some(Err(err)) if err.is_panic() => {
+                            error!(%err, "Client panicked");
+                        },
+                        Some(Err(_err)) => {},
+                        None=>{}
+                    };
+                }
+                stream_opt = self.acceptor.recv()=>{
+                    match stream_opt {
+                        Some(stream)=>{
+                            let client = ClientHandler::new(
+                                stream,
+                                self.ditto_ip.clone(),
+                                self.video.clone(),
+                                self.stream_name.clone(),
+                            )
+                            .await?;
+                            self.clients.spawn(client.run());
+                        }
+                        None=>{return Err(StreamError::DittoStreamClosed)?;}
+                    }
+                }
+            }
+            if self.clients.is_empty() {
+                tokio::time::sleep(Duration::from_secs(1)).await;
+            }
+        }
     }
 }
